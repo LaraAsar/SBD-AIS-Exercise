@@ -1,0 +1,85 @@
+networks:
+  web:
+    name: web
+  intercom:
+    name: intercom
+
+volumes:
+  order_pg_vol:
+
+services:
+  traefik:
+    image: "traefik:v3.5.2"
+    command:
+      - "--api.insecure=true"
+      - "--providers.docker=true"
+      - "--providers.docker.exposedbydefault=false"
+      - "--entrypoints.web.address=:80"
+    ports:
+      - "80:80"
+      - "8080:8080"
+    networks:
+      - web
+    volumes:
+      - /var/run/docker.sock:/var/run/docker.sock:ro
+
+  orderservice:
+    container_name: orderservice
+    build: .
+    command: [ "/app/ordersystem" ]
+    environment:
+      - POSTGRES_DB=order
+      - POSTGRES_USER=docker
+      - POSTGRES_PASSWORD=docker
+      - POSTGRES_TCP_PORT=5432
+      - DB_HOST=order-postgres
+    networks:
+      - intercom
+      - web
+    labels:
+      - "traefik.enable=true"
+      - "traefik.http.routers.orders-api.rule=Host(`orders.localhost`)"
+      - "traefik.http.routers.orders-api.entrypoints=web"
+      - "traefik.http.routers.orders-api.service=orders-api"
+      - "traefik.http.services.orders-api.loadbalancer.server.port=3000"
+    depends_on:
+      order-postgres:
+        condition: service_healthy
+
+  sws:
+    image: joseluisq/static-web-server:latest
+    networks:
+      - web
+    volumes:
+      - ./frontend:/public
+    environment:
+      - SERVER_ROOT=/public
+      - SERVER_PORT=80
+    labels:
+      - "traefik.enable=true"
+      - "traefik.http.routers.sws.rule=Host(`localhost`)"
+      - "traefik.http.routers.sws.entrypoints=web"
+      - "traefik.http.services.sws.loadbalancer.server.port=80"
+      - "traefik.http.routers.api.rule=Host(`localhost`) && PathPrefix(`/api`)"
+      - "traefik.http.routers.api.entrypoints=web"
+      - "traefik.http.routers.api.service=orders-api"
+
+  order-postgres:
+    image: postgres:16
+    restart: always
+    networks:
+      - intercom
+    volumes:
+      - order_pg_vol:/var/lib/postgresql/data
+    environment:
+      - POSTGRES_DB=order
+      - POSTGRES_USER=docker
+      - POSTGRES_PASSWORD=docker
+      - POSTGRES_TCP_PORT=5432
+    expose:
+      - "5432"
+    healthcheck:
+      test: ["CMD-SHELL", "pg_isready -U docker -d order"]
+      interval: 2s
+      timeout: 3s
+      retries: 10
