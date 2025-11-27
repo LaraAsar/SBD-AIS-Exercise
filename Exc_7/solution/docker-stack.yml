@@ -2,9 +2,12 @@ version: "3.9"
 
 networks:
   order_web:
+    name: app_order_web
     driver: overlay
     attachable: true
+
   order_intercom:
+    name: app_order_intercom
     driver: overlay
     attachable: true
 
@@ -29,23 +32,19 @@ services:
     command:
       - --api.dashboard=true
       - --log.level=DEBUG
-
-      # SWARM PROVIDER (correct for Traefik v3)
       - --providers.swarm=true
       - --providers.swarm.watch=true
       - --providers.swarm.endpoint=unix:///var/run/docker.sock
-      - --providers.swarm.network=order_web
-
-      # ENTRYPOINT
+      - --providers.swarm.network=app_order_web
       - --entrypoints.web.address=:80
-
     ports:
-      - "80:80"
+      - target: 80
+        published: 80
+        mode: host
     volumes:
       - /var/run/docker.sock:/var/run/docker.sock:ro
     networks:
       - order_web
-
     deploy:
       placement:
         constraints:
@@ -67,7 +66,6 @@ services:
         - traefik.http.routers.frontend.rule=Host(`localhost`)
         - traefik.http.routers.frontend.entrypoints=web
         - traefik.http.services.frontend.loadbalancer.server.port=80
-        - traefik.http.services.frontend.loadbalancer.server.scheme=http
 
   orderservice:
     image: ghcr.io/ddibiasi/sbd-ais-exercise/orderservice:1.0
@@ -90,7 +88,7 @@ services:
       - S3_ACCESS_KEY_ID_FILE=/run/secrets/s3_user
       - S3_SECRET_ACCESS_KEY_FILE=/run/secrets/s3_password
     networks:
-      - order_web          # FIXED
+      - order_web
       - order_intercom
     deploy:
       mode: global
@@ -99,7 +97,6 @@ services:
         - traefik.http.routers.orders.rule=Host(`orders.localhost`)
         - traefik.http.routers.orders.entrypoints=web
         - traefik.http.services.orders.loadbalancer.server.port=3000
-        - traefik.http.services.orders.loadbalancer.server.scheme=http
 
   postgres:
     image: postgres:18
@@ -143,4 +140,3 @@ services:
         - traefik.http.routers.minio.rule=Host(`minio.localhost`)
         - traefik.http.routers.minio.entrypoints=web
         - traefik.http.services.minio.loadbalancer.server.port=8500
-        - traefik.http.services.minio.loadbalancer.server.scheme=http
