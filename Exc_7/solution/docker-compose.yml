@@ -64,6 +64,7 @@ services:
         - "traefik.enable=true"
         - "traefik.http.routers.frontend.rule=Host(`localhost`)"
         - "traefik.http.services.frontend.loadbalancer.server.port=80"
+        - "traefik.http.routers.frontend.entrypoints=web"
 
 
   orderservice:
@@ -96,6 +97,7 @@ services:
       labels:
         - "traefik.enable=true"
         - "traefik.http.routers.orders.rule=Host(`orders.localhost`)"
+        - "traefik.http.routers.orders.entrypoints=web"
         - "traefik.http.services.orders.loadbalancer.server.port=3000"
       # Should be reachable at http://orders.localhost
       # always restart container on failure
@@ -126,7 +128,7 @@ services:
 
   minio:
     image: minio/minio:latest
-    command: [ "server", "--address", ":8500", "/data" ]
+    command: [ "server", "/data" ]
     volumes:
       - minio_vol:/data
     secrets:
@@ -135,10 +137,21 @@ services:
     environment:
       - MINIO_ROOT_USER_FILE=/run/secrets/s3_user
       - MINIO_ROOT_PASSWORD_FILE=/run/secrets/s3_password
+      - MINIO_ADDRESS=:8500
+      - MINIO_CONSOLE_ADDRESS=:8501
     networks:
+      - web
       - intercom
     deploy:
       replicas: 1
       placement:
         constraints:
           - node.role == manager
+      labels:
+        - "traefik.enable=true"
+        - "traefik.http.routers.minio-api.rule=Host(`minio.localhost`)"
+        - "traefik.http.routers.minio-api.entrypoints=web"
+        - "traefik.http.services.minio-api.loadbalancer.server.port=8500"
+        - "traefik.http.routers.minio-console.rule=Host(`minio-console.localhost`)"
+        - "traefik.http.routers.minio-console.entrypoints=web"
+        - "traefik.http.services.minio-console.loadbalancer.server.port=8501"
